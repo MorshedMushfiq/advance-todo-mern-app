@@ -19,7 +19,7 @@ mongoose
 
 const Task = require("./models/Task");
 
-// GET all tasks
+// Get all tasks
 app.get("/tasks", async (req, res) => {
   try {
     const tasks = await Task.find();
@@ -29,16 +29,15 @@ app.get("/tasks", async (req, res) => {
   }
 });
 
-// POST new task
+// Add task
 app.post("/tasks", async (req, res) => {
   try {
-    const { text, deadline } = req.body;
     const newTask = new Task({
-      text,
-      deadline: deadline ? new Date(deadline) : null,
+      text: req.body.text,
+      deadline: req.body.deadline || null,
       completed: false,
       paused: false,
-      remainingTime: deadline ? new Date(deadline).getTime() - Date.now() : null,
+      remainingTime: null,
     });
     const savedTask = await newTask.save();
     res.json(savedTask);
@@ -47,69 +46,46 @@ app.post("/tasks", async (req, res) => {
   }
 });
 
-// PUT update task
-app.put("/tasks/:id", async (req, res) => {
-  try {
-    const { text, deadline, completed, paused, remainingTime } = req.body;
-
-    const task = await Task.findById(req.params.id);
-    if (!task) return res.status(404).json({ error: "Task not found." });
-
-    // Prevent editing completed tasks text or deadline
-    if (task.completed && text) {
-      return res.status(400).json({ error: "Cannot edit completed task" });
-    }
-
-    task.text = text || task.text;
-    
-    // Handle deadline updates
-    if (deadline !== undefined) {
-      if (deadline === null) {
-        task.deadline = null;
-        task.remainingTime = null;
-      } else {
-        task.deadline = new Date(deadline);
-        task.remainingTime = task.deadline.getTime() - Date.now();
-      }
-    }
-    
-    // Handle pause/resume functionality
-    if (paused !== undefined) {
-      if (paused && !task.paused) {
-        // Pausing the task - store remaining time
-        if (task.deadline) {
-          task.remainingTime = task.deadline.getTime() - Date.now();
-        }
-      } else if (!paused && task.paused) {
-        // Resuming the task - set new deadline based on remaining time
-        if (task.remainingTime) {
-          task.deadline = new Date(Date.now() + task.remainingTime);
-        }
-      }
-      task.paused = paused;
-    }
-    
-    if (remainingTime !== undefined) {
-      task.remainingTime = remainingTime;
-    }
-    
-    if (completed !== undefined) task.completed = completed;
-
-    await task.save();
-    res.json(task);
-  } catch (err) {
-    console.error("PUT error:", err);
-    res.status(500).json({ error: "Failed to update task." });
-  }
-});
-
-// DELETE task
+// Delete task
 app.delete("/tasks/:id", async (req, res) => {
   try {
     const deletedTask = await Task.findByIdAndDelete(req.params.id);
+    if (!deletedTask) {
+      return res.status(404).json({ error: "Task not found" });
+    }
     res.json(deletedTask);
   } catch (err) {
-    res.status(500).json({ error: "Failed to delete task." });
+    res.status(500).json({ error: "Failed to delete task" });
+  }
+});
+
+// Update task
+app.put("/tasks/:id", async (req, res) => {
+  try {
+    const task = await Task.findById(req.params.id);
+    if (!task) return res.status(404).json({ error: "Task not found." });
+
+    // prevent editing if completed
+    if (task.completed && (req.body.text || req.body.deadline)) {
+      return res
+        .status(400)
+        .json({ error: "Completed tasks cannot be edited." });
+    }
+
+    // update allowed fields
+    if (req.body.text !== undefined) task.text = req.body.text;
+    if (req.body.deadline !== undefined) task.deadline = req.body.deadline;
+    if (req.body.completed !== undefined) task.completed = req.body.completed;
+    if (req.body.paused !== undefined) task.paused = req.body.paused;
+    if (req.body.remainingTime !== undefined) {
+      task.remainingTime = req.body.remainingTime;
+    }
+
+    const updatedTask = await task.save();
+    res.json(updatedTask);
+  } catch (err) {
+    console.error("PUT error:", err);
+    res.status(500).json({ error: "Failed to update task." });
   }
 });
 

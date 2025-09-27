@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useMemo } from "react";
 import axios from "axios";
 import Swal from "sweetalert2";
 
@@ -26,10 +26,7 @@ function App() {
     return () => clearInterval(timer);
   }, []);
 
-  const parseDeadline = (deadline) => {
-    if (!deadline) return null;
-    return new Date(deadline);
-  };
+  const parseDeadline = (deadline) => (deadline ? new Date(deadline) : null);
 
   const isTimedOut = (task) => {
     const d = parseDeadline(task.deadline);
@@ -39,33 +36,25 @@ function App() {
   };
 
   const timeLeft = (task) => {
-    // If task is completed, show completed status
-    if (task.completed) {
-      return "✅ Completed";
-    }
-
-    // If task is paused, show paused status with remaining time
+    if (task.completed) return "✅ Completed";
     if (task.paused && task.remainingTime) {
       const mins = Math.floor(task.remainingTime / 60000);
       const secs = Math.floor((task.remainingTime % 60000) / 1000);
       return `⏸ ${mins}m ${secs}s remaining`;
     }
 
-    // If task has no deadline
     const d = parseDeadline(task.deadline);
     if (!d) return "No deadline";
 
-    // If task is timed out
     const diff = d.getTime() - Date.now();
     if (diff <= 0) return "⛔ Time Out";
 
-    // Show time left for active tasks
     const mins = Math.floor(diff / 60000);
     const secs = Math.floor((diff % 60000) / 1000);
     return `${mins}m ${secs}s left`;
   };
 
-  // Add task
+  // Add Task
   const addTask = async () => {
     if (!text.trim()) return;
 
@@ -78,7 +67,7 @@ function App() {
       showCancelButton: true,
     });
 
-    if (deadlineMinutes === null) return; // User clicked cancel
+    if (deadlineMinutes === null) return;
     if (!deadlineMinutes) {
       Swal.fire("Error", "Please enter a valid deadline", "error");
       return;
@@ -116,7 +105,6 @@ function App() {
     }
 
     try {
-      // Calculate remaining time when completing
       let remainingTime = null;
       if (task.deadline && !task.completed) {
         const d = parseDeadline(task.deadline);
@@ -133,20 +121,18 @@ function App() {
     }
   };
 
-  // Toggle Pause - FIXED VERSION
+  // Toggle Pause
   const togglePause = async (task) => {
     try {
       let updateData = {};
 
       if (!task.paused) {
-        // Pausing the task - calculate and store remaining time
+        // Pausing the task - calculate remaining time
         const d = parseDeadline(task.deadline);
         const remainingTime = d ? Math.max(0, d.getTime() - Date.now()) : null;
-
         updateData = {
           paused: true,
           remainingTime: remainingTime,
-          deadline: task.deadline, // Keep the original deadline
         };
       } else {
         // Resuming the task - set new deadline based on remaining time
@@ -154,18 +140,14 @@ function App() {
           const newDeadline = new Date(
             Date.now() + task.remainingTime
           ).toISOString();
-
           updateData = {
             paused: false,
             deadline: newDeadline,
             remainingTime: null,
           };
         } else {
-          // If no remaining time, just unpause without changing deadline
-          updateData = {
-            paused: false,
-            remainingTime: null,
-          };
+          // If no remaining time, just unpause
+          updateData = { paused: false, remainingTime: null };
         }
       }
 
@@ -176,7 +158,7 @@ function App() {
     }
   };
 
-  // Edit task text inline
+  // Edit task inline
   const startEditing = (task) => {
     if (task.completed) {
       Swal.fire({
@@ -194,7 +176,6 @@ function App() {
       setEditingId(null);
       return;
     }
-
     try {
       const res = await axios.put(`${API_URL}/tasks/${taskId}`, {
         text: newText.trim(),
@@ -206,7 +187,7 @@ function App() {
     }
   };
 
-  // Edit deadline
+  // Edit Deadline
   const editDeadline = async (task) => {
     const { value: deadlineMinutes } = await Swal.fire({
       title: "Edit Deadline",
@@ -217,7 +198,7 @@ function App() {
       showCancelButton: true,
     });
 
-    if (deadlineMinutes === null) return; // User clicked cancel
+    if (deadlineMinutes === null) return;
 
     let updatedDeadline = null;
     if (deadlineMinutes > 0) {
@@ -229,7 +210,7 @@ function App() {
     try {
       const res = await axios.put(`${API_URL}/tasks/${task._id}`, {
         deadline: updatedDeadline,
-        paused: false, // Resume task when changing deadline
+        paused: false,
         remainingTime: null,
       });
       setTasks((prev) => prev.map((t) => (t._id === task._id ? res.data : t)));
@@ -244,7 +225,7 @@ function App() {
     }
   };
 
-  // Delete task
+  // Delete Task
   const deleteTask = async (id) => {
     const result = await Swal.fire({
       title: "Are you sure?",
@@ -272,7 +253,7 @@ function App() {
     }
   };
 
-  // View task
+  // View Task
   const viewTask = (task) => {
     const d = parseDeadline(task.deadline);
     const deadlineStr = d ? d.toLocaleString() : "No deadline";
@@ -288,14 +269,10 @@ function App() {
       title: "Task Details",
       html: `
         <div class="text-left">
-          <p class="mb-2"><strong class="text-gray-700">Text:</strong> ${
-            task.text
-          }</p>
-          <p class="mb-2"><strong class="text-gray-700">Status:</strong> ${status}</p>
-          <p class="mb-2"><strong class="text-gray-700">Deadline:</strong> ${deadlineStr}</p>
-          <p class="mb-0"><strong class="text-gray-700">Time Left:</strong> ${timeLeft(
-            task
-          )}</p>
+          <p><strong>Text:</strong> ${task.text}</p>
+          <p><strong>Status:</strong> ${status}</p>
+          <p><strong>Deadline:</strong> ${deadlineStr}</p>
+          <p><strong>Time Left:</strong> ${timeLeft(task)}</p>
         </div>
       `,
       confirmButtonText: "OK",
@@ -303,19 +280,28 @@ function App() {
     });
   };
 
-  // Categorize tasks
-  const activeTasks = tasks.filter(
-    (task) => !task.completed && !task.paused && !isTimedOut(task)
+  // Categorize tasks (memoized to reduce re-renders)
+  const activeTasks = useMemo(
+    () => tasks.filter((t) => !t.completed && !t.paused && !isTimedOut(t)),
+    [tasks, now]
   );
-  const pausedTasks = tasks.filter((task) => task.paused && !task.completed);
-  const completedTasks = tasks.filter((task) => task.completed);
-  const timedOutTasks = tasks.filter(
-    (task) => isTimedOut(task) && !task.completed
+  const pausedTasks = useMemo(
+    () => tasks.filter((t) => t.paused && !t.completed),
+    [tasks]
+  );
+  const completedTasks = useMemo(
+    () => tasks.filter((t) => t.completed),
+    [tasks]
+  );
+  const timedOutTasks = useMemo(
+    () => tasks.filter((t) => isTimedOut(t) && !t.completed),
+    [tasks, now]
   );
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 py-8 px-4 sm:px-6 lg:px-8">
       <div className="max-w-4xl mx-auto">
+        {/* Header */}
         <div className="text-center mb-10">
           <h1 className="text-4xl font-bold text-gray-800 mb-2 flex items-center justify-center">
             <span className="mr-3">⏰</span> Smart Task Manager
@@ -349,140 +335,138 @@ function App() {
           </form>
         </div>
 
-        {/* Task Lists */}
-        <div className="space-y-8">
-          {/* Active Tasks */}
-          {activeTasks.length > 0 && (
-            <div>
-              <h2 className="text-xl font-semibold text-gray-800 mb-4 flex items-center">
-                <span className="w-3 h-3 bg-green-500 rounded-full mr-2"></span>
-                Active Tasks ({activeTasks.length})
-              </h2>
-              <div className="grid gap-4 md:grid-cols-2">
-                {activeTasks.map((task) => (
-                  <TaskCard
-                    key={task._id}
-                    task={task}
-                    timeLeft={timeLeft(task)}
-                    editingId={editingId}
-                    onToggleComplete={toggleComplete}
-                    onTogglePause={togglePause}
-                    onStartEditing={startEditing}
-                    onSaveEdit={saveEdit}
-                    onEditDeadline={editDeadline}
-                    onViewTask={viewTask}
-                    onDeleteTask={deleteTask}
-                    onCancelEdit={() => setEditingId(null)}
-                    isTimedOut={isTimedOut(task)}
-                  />
-                ))}
-              </div>
-            </div>
-          )}
+        {/* Task Sections */}
+        <TaskSection
+          title="Active Tasks"
+          color="green"
+          tasks={activeTasks}
+          timeLeft={timeLeft}
+          editingId={editingId}
+          toggleComplete={toggleComplete}
+          togglePause={togglePause}
+          startEditing={startEditing}
+          saveEdit={saveEdit}
+          editDeadline={editDeadline}
+          viewTask={viewTask}
+          deleteTask={deleteTask}
+          setEditingId={setEditingId}
+        />
 
-          {/* Paused Tasks */}
-          {pausedTasks.length > 0 && (
-            <div>
-              <h2 className="text-xl font-semibold text-gray-800 mb-4 flex items-center">
-                <span className="w-3 h-3 bg-yellow-500 rounded-full mr-2"></span>
-                Paused Tasks ({pausedTasks.length})
-              </h2>
-              <div className="grid gap-4 md:grid-cols-2">
-                {pausedTasks.map((task) => (
-                  <TaskCard
-                    key={task._id}
-                    task={task}
-                    timeLeft={timeLeft(task)}
-                    editingId={editingId}
-                    onToggleComplete={toggleComplete}
-                    onTogglePause={togglePause}
-                    onStartEditing={startEditing}
-                    onSaveEdit={saveEdit}
-                    onEditDeadline={editDeadline}
-                    onViewTask={viewTask}
-                    onDeleteTask={deleteTask}
-                    onCancelEdit={() => setEditingId(null)}
-                    isTimedOut={isTimedOut(task)}
-                  />
-                ))}
-              </div>
-            </div>
-          )}
+        <TaskSection
+          title="Paused Tasks"
+          color="yellow"
+          tasks={pausedTasks}
+          timeLeft={timeLeft}
+          editingId={editingId}
+          toggleComplete={toggleComplete}
+          togglePause={togglePause}
+          startEditing={startEditing}
+          saveEdit={saveEdit}
+          editDeadline={editDeadline}
+          viewTask={viewTask}
+          deleteTask={deleteTask}
+          setEditingId={setEditingId}
+        />
 
-          {/* Timed Out Tasks */}
-          {timedOutTasks.length > 0 && (
-            <div>
-              <h2 className="text-xl font-semibold text-gray-800 mb-4 flex items-center">
-                <span className="w-3 h-3 bg-red-500 rounded-full mr-2"></span>
-                Timed Out ({timedOutTasks.length})
-              </h2>
-              <div className="grid gap-4 md:grid-cols-2">
-                {timedOutTasks.map((task) => (
-                  <TaskCard
-                    key={task._id}
-                    task={task}
-                    timeLeft={timeLeft(task)}
-                    editingId={editingId}
-                    onToggleComplete={toggleComplete}
-                    onTogglePause={togglePause}
-                    onStartEditing={startEditing}
-                    onSaveEdit={saveEdit}
-                    onEditDeadline={editDeadline}
-                    onViewTask={viewTask}
-                    onDeleteTask={deleteTask}
-                    onCancelEdit={() => setEditingId(null)}
-                    isTimedOut={isTimedOut(task)}
-                  />
-                ))}
-              </div>
-            </div>
-          )}
+        <TaskSection
+          title="Timed Out Tasks"
+          color="red"
+          tasks={timedOutTasks}
+          timeLeft={timeLeft}
+          editingId={editingId}
+          toggleComplete={toggleComplete}
+          togglePause={togglePause}
+          startEditing={startEditing}
+          saveEdit={saveEdit}
+          editDeadline={editDeadline}
+          viewTask={viewTask}
+          deleteTask={deleteTask}
+          setEditingId={setEditingId}
+        />
 
-          {/* Completed Tasks */}
-          {completedTasks.length > 0 && (
-            <div>
-              <h2 className="text-xl font-semibold text-gray-800 mb-4 flex items-center">
-                <span className="w-3 h-3 bg-blue-500 rounded-full mr-2"></span>
-                Completed ({completedTasks.length})
-              </h2>
-              <div className="grid gap-4 md:grid-cols-2">
-                {completedTasks.map((task) => (
-                  <TaskCard
-                    key={task._id}
-                    task={task}
-                    timeLeft={timeLeft(task)}
-                    editingId={editingId}
-                    onToggleComplete={toggleComplete}
-                    onTogglePause={togglePause}
-                    onStartEditing={startEditing}
-                    onSaveEdit={saveEdit}
-                    onEditDeadline={editDeadline}
-                    onViewTask={viewTask}
-                    onDeleteTask={deleteTask}
-                    onCancelEdit={() => setEditingId(null)}
-                    isTimedOut={isTimedOut(task)}
-                  />
-                ))}
-              </div>
-            </div>
-          )}
+        <TaskSection
+          title="Completed Tasks"
+          color="blue"
+          tasks={completedTasks}
+          timeLeft={timeLeft}
+          editingId={editingId}
+          toggleComplete={toggleComplete}
+          togglePause={togglePause}
+          startEditing={startEditing}
+          saveEdit={saveEdit}
+          editDeadline={editDeadline}
+          viewTask={viewTask}
+          deleteTask={deleteTask}
+          setEditingId={setEditingId}
+        />
 
-          {tasks.length === 0 && (
-            <div className="text-center py-12 bg-white rounded-xl shadow-md">
-              <div className="text-5xl mb-4">📝</div>
-              <h3 className="text-xl font-medium text-gray-700 mb-2">
-                No tasks yet
-              </h3>
-              <p className="text-gray-500">Add a task to get started!</p>
-            </div>
-          )}
-        </div>
+        {tasks.length === 0 && (
+          <div className="text-center py-12 bg-white rounded-xl shadow-md">
+            <div className="text-5xl mb-4">📝</div>
+            <h3 className="text-xl font-medium text-gray-700 mb-2">
+              No tasks yet
+            </h3>
+            <p className="text-gray-500">Add a task to get started!</p>
+          </div>
+        )}
       </div>
     </div>
   );
 }
 
-// Task Card Component
+// Task Section
+const TaskSection = ({
+  title,
+  color,
+  tasks,
+  timeLeft,
+  editingId,
+  toggleComplete,
+  togglePause,
+  startEditing,
+  saveEdit,
+  editDeadline,
+  viewTask,
+  deleteTask,
+  setEditingId,
+}) => {
+  if (!tasks.length) return null;
+
+  return (
+    <div className="mb-8">
+      <h2 className="text-xl font-semibold text-gray-800 mb-4 flex items-center">
+        <span className={`w-3 h-3 rounded-full mr-2 bg-${color}-500`}></span>
+        {title} ({tasks.length})
+      </h2>
+      <div className="grid gap-4 md:grid-cols-2">
+        {tasks.map((task) => (
+          <TaskCard
+            key={task._id}
+            task={task}
+            timeLeft={timeLeft(task)}
+            editingId={editingId}
+            onToggleComplete={toggleComplete}
+            onTogglePause={togglePause}
+            onStartEditing={startEditing}
+            onSaveEdit={saveEdit}
+            onEditDeadline={editDeadline}
+            onViewTask={viewTask}
+            onDeleteTask={deleteTask}
+            onCancelEdit={() => setEditingId(null)}
+            isTimedOut={
+              task.deadline
+                ? Date.now() > new Date(task.deadline).getTime() &&
+                  !task.completed
+                : false
+            }
+          />
+        ))}
+      </div>
+    </div>
+  );
+};
+
+// Task Card
 const TaskCard = ({
   task,
   timeLeft,
@@ -505,7 +489,6 @@ const TaskCard = ({
         task.completed ? "opacity-70" : ""
       } ${isTimedOut ? "border-l-4 border-red-500" : ""}`}
     >
-      {/* Task Header */}
       <div className="flex justify-between items-start mb-3">
         <div className="flex items-center">
           <button
@@ -557,7 +540,6 @@ const TaskCard = ({
         </button>
       </div>
 
-      {/* Time Display */}
       <div
         className={`text-sm mb-4 pl-9 ${
           isTimedOut
@@ -572,7 +554,6 @@ const TaskCard = ({
         {timeLeft}
       </div>
 
-      {/* Action Buttons */}
       <div className="flex flex-wrap gap-2">
         {!task.completed && (
           <>
